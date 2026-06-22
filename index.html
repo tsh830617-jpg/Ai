@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>生成式 AI 證照衝刺</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #21262d;
+    --accent: #58a6ff;
+    --accent2: #bc8cff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); }
+
+  /* Layout */
+  .shell { display: flex; flex-direction: column; height: 100vh; max-width: 900px; margin: 0 auto; padding: 16px; gap: 12px; }
+
+  /* Header */
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .logo { font-size: 22px; }
+  .title-block h1 { font-size: 16px; font-weight: 700; color: var(--text); }
+  .title-block p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .exam-badge { margin-left: auto; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 6px; }
+  .tab { flex: 1; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; text-align: center; transition: all 0.15s; }
+  .tab:hover { color: var(--text); border-color: #444; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Panel */
+  .panel { display: none; flex: 1; flex-direction: column; gap: 10px; overflow: hidden; }
+  .panel.active { display: flex; }
+
+  /* Chat panel */
+  .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.6; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+  .msg.ai { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 3px; white-space: pre-wrap; }
+  .msg.ai strong { color: var(--accent); }
+  .msg.system { align-self: center; background: transparent; border: 1px dashed var(--border); color: var(--muted); font-size: 12px; text-align: center; max-width: 100%; }
+
+  .chat-input-row { display: flex; gap: 8px; }
+  .chat-input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; color: var(--text); font-size: 14px; font-family: inherit; resize: none; height: 48px; outline: none; transition: border-color 0.15s; }
+  .chat-input:focus { border-color: var(--accent); }
+  .send-btn { padding: 0 20px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: opacity 0.15s; }
+  .send-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .quick-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .quick-btn { padding: 5px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+  .quick-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Quiz panel */
+  .quiz-header { display: flex; align-items: center; gap: 10px; }
+  .quiz-progress { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .quiz-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width 0.3s; }
+  .quiz-counter { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .quiz-score { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--green); white-space: nowrap; }
+
+  .quiz-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+  .quiz-category { font-size: 11px; font-weight: 700; color: var(--accent2); letter-spacing: 1px; text-transform: uppercase; }
+  .quiz-q { font-size: 16px; font-weight: 600; line-height: 1.6; }
+  .quiz-options { display: flex; flex-direction: column; gap: 8px; }
+  .quiz-opt { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.15s; }
+  .quiz-opt:hover:not(.disabled) { border-color: var(--accent); background: rgba(88,166,255,0.08); }
+  .quiz-opt.correct { border-color: var(--green); background: rgba(63,185,80,0.12); color: var(--green); font-weight: 600; }
+  .quiz-opt.wrong { border-color: var(--red); background: rgba(248,81,73,0.12); color: var(--red); }
+  .quiz-opt.disabled { cursor: default; }
+
+  .quiz-explain { padding: 12px; background: rgba(88,166,255,0.06); border: 1px solid rgba(88,166,255,0.2); border-radius: 8px; font-size: 13px; line-height: 1.6; color: var(--muted); display: none; }
+  .quiz-explain.show { display: block; }
+  .quiz-explain strong { color: var(--accent); }
+
+  .quiz-nav { display: flex; gap: 8px; }
+  .quiz-nav button { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .quiz-nav button:hover { border-color: var(--accent); color: var(--accent); }
+  .quiz-nav button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Cheatsheet panel */
+  .cheatsheet { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .cs-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .cs-section-header { padding: 10px 14px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .cs-section-header:hover { background: rgba(255,255,255,0.03); }
+  .cs-icon { font-size: 16px; }
+  .cs-title { font-size: 14px; font-weight: 700; flex: 1; }
+  .cs-toggle { color: var(--muted); transition: transform 0.2s; }
+  .cs-body { display: none; padding: 0 14px 14px; }
+  .cs-body.open { display: block; }
+  .cs-item { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
+  .cs-item:last-child { border-bottom: none; }
+  .cs-key { color: var(--accent); font-weight: 600; min-width: 120px; flex-shrink: 0; }
+  .cs-val { color: var(--muted); }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
+  .tag.hot { background: rgba(248,81,73,0.2); color: var(--red); }
+  .tag.imp { background: rgba(210,153,34,0.2); color: var(--yellow); }
+
+  /* Loading */
+  .typing { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
+  .typing span { width: 6px; height: 6px; background: var(--muted); border-radius: 50%; animation: bounce 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+  /* Countdown */
+  .countdown { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .countdown .days { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--accent); }
+  .countdown .label { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="logo">🤖</div>
+    <div class="title-block">
+      <h1>生成式 AI 證照衝刺</h1>
+      <p>資策會 iCAP 認證備考工具</p>
+    </div>
+    <div class="countdown">
+      <span class="days" id="countdown-days">5</span>
+      <span class="label">天後考試</span>
+    </div>
+    <div class="exam-badge">6/27 考試</div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('chat')">💬 AI 家教</div>
+    <div class="tab" onclick="switchTab('quiz')">📝 模擬測驗</div>
+    <div class="tab" onclick="switchTab('cheatsheet')">📋 考前速查</div>
+  </div>
+
+  <!-- Chat Panel -->
+  <div class="panel active" id="panel-chat">
+    <div class="chat-messages" id="chat-messages">
+      <div class="msg system">AI 家教模式 — 問任何關於生成式AI的問題</div>
+      <div class="msg ai">嗨 Hua！距離考試還有 5 天，讓我當你的專屬家教 🎯
+
+你可以問我：
+• 考試重點觀念（Transformer、RAG、Prompt Engineering…）
+• 不懂的題目解析
+• 直接出題考你某個主題
+• 台灣 iCAP 考試重點整理
+
+快問吧，時間有限，我們一起衝！</div>
+    </div>
+    <div class="quick-btns">
+      <button class="quick-btn" onclick="sendQuick('幫我整理 Prompt Engineering 的考試重點')">📌 Prompt 重點</button>
+      <button class="quick-btn" onclick="sendQuick('RAG 和 Fine-tuning 的差別是什麼？考試怎麼考？')">🔍 RAG vs Fine-tune</button>
+      <button class="quick-btn" onclick="sendQuick('出 5 題關於大型語言模型的考題給我')">📝 出題給我</button>
+      <button class="quick-btn" onclick="sendQuick('生成式AI的倫理與風險，考試重點是什麼？')">⚠️ AI 倫理</button>
+      <button class="quick-btn" onclick="sendQuick('Transformer 架構的考試必知重點')">🤖 Transformer</button>
+      <button class="quick-btn" onclick="sendQuick('請幫我做最後衝刺，列出10個最高頻考點')">🔥 高頻考點</button>
+    </div>
+    <div class="chat-input-row">
+      <textarea class="chat-input" id="chat-input" placeholder="問我任何生成式AI考試問題…" onkeydown="handleKey(event)"></textarea>
+      <button class="send-btn" id="send-btn" onclick="sendChat()">送出</button>
+    </div>
+  </div>
+
+  <!-- Quiz Panel -->
+  <div class="panel" id="panel-quiz">
+    <div class="quiz-header">
+      <div class="quiz-progress"><div class="quiz-progress-fill" id="quiz-fill" style="width:0%"></div></div>
+      <span class="quiz-counter" id="quiz-counter">1 / 20</span>
+      <span class="quiz-score" id="quiz-score">✓ 0</span>
+    </div>
+    <div class="quiz-card" id="quiz-card">
+      <div style="text-align:center; padding: 20px; color: var(--muted);">
+        <div style="font-size:40px;margin-bottom:12px">📝</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px">模擬測驗</div>
+        <div style="font-size:13px;margin-bottom:20px">20 題隨機出題，涵蓋所有考試類別</div>
+        <button onclick="startQuiz()" style="padding:10px 30px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">開始測驗</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cheatsheet Panel -->
+  <div class="panel" id="panel-cheatsheet">
+    <div class="cheatsheet" id="cheatsheet"></div>
+  </div>
+</div>
+
+<script>
+// ── Tab switching ──────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['chat','quiz','cheatsheet'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ── Countdown ──────────────────────────────────────────
+function updateCountdown() {
+  const exam = new Date('2025-06-27T09:00:00+08:00');
+  const now = new Date();
+  const days = Math.max(0, Math.ceil((exam - now) / 86400000));
+  document.getElementById('countdown-days').textContent = days;
+}
+updateCountdown();
+
+// ── Chat ───────────────────────────────────────────────
+const SYSTEM_PROMPT = `你是台灣資策會「生成式AI證照」（iCAP）的專業備考家教。
+考試範圍包含：
+1. 生成式AI基礎概念（LLM、Transformer、GPT、BERT等）
+2. Prompt Engineering（提示工程）技巧
+3. RAG（檢索增強生成）架構
+4. Fine-tuning（微調）方法
+5. AI倫理與風險管理
+6. 企業AI應用與落地
+7. 多模態AI（文字/圖像/語音）
+8. AI評估指標與測試方法
+9. 向量資料庫與嵌入（Embedding）
+10. AI安全與Prompt Injection防護
+
+回答請使用繁體中文，風格簡潔重點式，多用條列，重點字詞加粗。
+如果是出題，請格式化為：題目、四個選項(A/B/C/D)、正確答案、解析。
+考試重點用 🔥 標注，常考陷阱用 ⚠️ 標注。`;
+
+let chatHistory = [];
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  appendMsg('user', text);
+  chatHistory.push({ role: 'user', content: text });
+  await callAI();
+}
+
+function sendQuick(text) {
+  document.getElementById('chat-input').value = text;
+  sendChat();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+function appendMsg(role, content) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  if (role === 'ai') {
+    div.innerHTML = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+  } else {
+    div.textContent = content;
+  }
+  const msgs = document.getElementById('chat-messages');
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function showTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  div.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  const msgs = document.getElementById('chat-messages');
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+async function callAI() {
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  const typingEl = showTyping();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: SYSTEM_PROMPT,
+        messages: chatHistory
+      })
+    });
+    const data = await res.json();
+    const reply = data.content?.map(b => b.text || '').join('') || '抱歉，請再試一次。';
+    typingEl.remove();
+    appendMsg('ai', reply);
+    chatHistory.push({ role: 'assistant', content: reply });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  } catch(e) {
+    typingEl.remove();
+    appendMsg('ai', '⚠️ 連線錯誤，請重試。');
+  }
+  btn.disabled = false;
+}
+
+// ── Quiz ───────────────────────────────────────────────
+const QUESTION_BANK = [
+  { cat: 'LLM基礎', q: 'Transformer 架構中，「自注意力機制」(Self-Attention) 的主要作用是？', opts: ['壓縮輸入序列的長度','讓模型學習序列中每個詞與其他詞的相關程度','將文字轉換成向量表示','減少模型參數數量'], ans: 1, explain: '自注意力機制讓模型可以衡量序列中每個位置與其他所有位置的相關性，是 Transformer 的核心創新。' },
+  { cat: 'Prompt工程', q: '「Chain-of-Thought Prompting」（思維鏈提示）的主要目的是？', opts: ['讓模型輸出更短的回答','引導模型逐步推理，提升複雜問題的準確度','加快模型推理速度','讓模型學習新知識'], ans: 1, explain: 'CoT 要求模型「一步一步思考」，透過中間推理步驟提升複雜任務的正確率。🔥 常考！' },
+  { cat: 'RAG', q: '關於 RAG（Retrieval-Augmented Generation）架構，下列描述何者正確？', opts: ['RAG 會修改 LLM 的參數','RAG 在推理時動態從外部知識庫檢索相關內容','RAG 不需要向量資料庫','RAG 和 Fine-tuning 完全相同'], ans: 1, explain: 'RAG 在推理時從向量資料庫檢索相關文件，與 LLM 生成結合，不修改模型參數，是解決知識截止問題的主流方法。' },
+  { cat: 'AI倫理', q: '「幻覺」(Hallucination) 在生成式 AI 中指的是？', opts: ['模型產生視覺圖像的能力','模型自信地生成不正確或虛假的資訊','模型拒絕回答問題','模型回應速度過慢'], ans: 1, explain: '幻覺是 LLM 的重大風險，模型可能流暢地輸出錯誤事實，⚠️ 企業部署前必須設計驗證機制。' },
+  { cat: 'Fine-tuning', q: 'LoRA（Low-Rank Adaptation）的主要優點是？', opts: ['完全取代原始模型參數','用極少額外參數高效微調大型模型','需要大量標注資料','僅適用於圖像模型'], ans: 1, explain: 'LoRA 透過低秩矩陣分解，只訓練少量附加參數即可完成微調，大幅降低計算成本。🔥 高頻考點！' },
+  { cat: 'Embedding', q: '向量資料庫（Vector Database）在 AI 應用中主要用來？', opts: ['儲存結構化的 SQL 資料','快速搜尋語義上相似的文字或資料','訓練神經網路','壓縮圖像檔案'], ans: 1, explain: '向量資料庫儲存文字/圖像的 Embedding 向量，支援相似度搜尋（如餘弦相似度），是 RAG 的基礎元件。' },
+  { cat: 'LLM基礎', q: '下列哪項不是 GPT 系列模型使用的架構？', opts: ['Decoder-only Transformer','自迴歸語言模型','Encoder-Decoder 雙向架構','自注意力機制'], ans: 2, explain: 'GPT 使用 Decoder-only 的自迴歸架構；Encoder-Decoder 架構是 T5、BART 等模型的特徵，BERT 則使用 Encoder-only。' },
+  { cat: 'Prompt工程', q: '「Few-Shot Prompting」是指？', opts: ['不提供任何範例，直接詢問','在提示中提供少量（2-5個）範例','提供大量訓練資料進行微調','讓模型自動生成題目'], ans: 1, explain: 'Few-shot 在提示中給幾個範例讓模型學習格式；Zero-shot 不給範例；⚠️ 別混淆 Few-shot prompting 和 Few-shot fine-tuning。' },
+  { cat: 'AI安全', q: '「Prompt Injection」攻擊的目的是？', opts: ['加速模型推理','讓攻擊者透過惡意輸入操控模型行為','提升模型準確度','壓縮模型大小'], ans: 1, explain: 'Prompt Injection 透過在輸入中嵌入惡意指令，試圖覆蓋系統提示或讓模型執行未授權操作，是企業 AI 部署的主要安全威脅。' },
+  { cat: 'AI應用', q: '「Temperature」參數在生成式 AI 中控制的是？', opts: ['模型的推理速度','輸出的隨機性/創造性程度','模型的記憶容量','訓練的學習率'], ans: 1, explain: 'Temperature 越高輸出越多樣/創意；越低輸出越確定/保守。🔥 Temperature=0 接近 greedy decoding，輸出最可能的答案。' },
+  { cat: 'LLM基礎', q: 'BERT 和 GPT 最主要的架構差異是？', opts: ['BERT 比 GPT 參數更少','BERT 使用雙向 Encoder，GPT 使用單向 Decoder','BERT 只能處理圖像','GPT 不使用 Transformer'], ans: 1, explain: 'BERT (Bidirectional Encoder) 同時看左右上下文，適合理解任務；GPT (Unidirectional Decoder) 從左到右生成，適合生成任務。' },
+  { cat: 'RAG', q: '相比 Fine-tuning，RAG 的主要優勢是？', opts: ['模型推理速度更快','知識可即時更新，無需重新訓練模型','成本更低','準確度更高'], ans: 1, explain: 'RAG 的核心優勢是知識外部化，更新知識庫即可，不需昂貴的模型重訓練。⚠️ Fine-tuning 適合改變模型行為/風格，RAG 適合更新知識。' },
+  { cat: 'AI倫理', q: '「AI 偏見」（AI Bias）最常源自於？', opts: ['硬體運算能力不足','訓練資料中存在的偏見或不平衡','模型參數過多','推理速度太慢'], ans: 1, explain: '訓練資料的歷史偏見、取樣不均等問題，會讓模型學習並複製甚至放大偏見，是 AI 倫理的核心議題。' },
+  { cat: 'Prompt工程', q: '「System Prompt」（系統提示）的主要功能是？', opts: ['讓模型記住所有對話','設定模型角色、行為規則和輸出格式','加速模型推理','壓縮對話歷史'], ans: 1, explain: 'System Prompt 在對話開始前設定 AI 的人格、限制、回應風格等，是建構 AI 應用的核心工具。🔥 高頻考點！' },
+  { cat: 'AI安全', q: '「資料毒化攻擊」（Data Poisoning）是指？', opts: ['刪除模型訓練資料','在訓練資料中植入惡意樣本，影響模型行為','竊取模型輸出','加密訓練資料'], ans: 1, explain: '資料毒化在訓練前污染資料集，使模型在特定觸發條件下產生錯誤輸出，是 AI 供應鏈安全的重要威脅。' },
+  { cat: 'LLM基礎', q: '「Token」在 LLM 中指的是？', opts: ['完整的句子','一個固定的詞彙','文字的基本處理單位（可能是詞、子詞或字元）','模型的單一神經元'], ans: 2, explain: 'LLM 不以完整詞彙為單位，而是切分為 token（例如 "unhappy" 可能是 "un" + "happy"），⚠️ 1 個英文詞約 1-2 tokens，中文則視切分方式而定。' },
+  { cat: 'AI應用', q: '「多模態 AI」（Multimodal AI）是指？', opts: ['可在多個設備上執行的 AI','能同時處理文字、圖像、音訊等不同類型資料的 AI','擁有多個版本的 AI 模型','可以多人同時使用的 AI'], ans: 1, explain: '多模態 AI 如 GPT-4V、Gemini 可跨模態理解，例如圖文並用，是目前主流發展方向。🔥' },
+  { cat: 'Fine-tuning', q: '「RLHF」（Reinforcement Learning from Human Feedback）在 ChatGPT 中的作用是？', opts: ['提升模型運算效率','透過人類偏好評分，使模型輸出更符合人類期望','擴大訓練資料集','壓縮模型參數'], ans: 1, explain: 'RLHF 讓人類評分員標記模型輸出好壞，訓練 Reward Model，再以強化學習微調 LLM，使回答更有幫助、無害且誠實（HHH原則）。🔥' },
+  { cat: 'Embedding', q: '「餘弦相似度」（Cosine Similarity）在 AI 中常用來衡量？', opts: ['兩個向量之間的角度距離（語義相似性）','模型的訓練損失','資料集的大小','模型推理速度'], ans: 0, explain: '餘弦相似度計算兩個向量夾角的餘弦值，值域 -1 到 1，越接近 1 表示越相似，廣泛用於語義搜尋和 RAG 的文件檢索。' },
+  { cat: 'AI倫理', q: '「可解釋性 AI」（Explainable AI, XAI）的主要目標是？', opts: ['讓 AI 跑得更快','讓人類能理解 AI 如何做出決策','讓 AI 自主學習','提升模型準確率'], ans: 1, explain: 'XAI 旨在使 AI 決策過程透明可解釋，對於高風險應用（醫療、金融、法律）尤其重要，也是歐盟 AI 法規的核心要求。' },
+];
+
+let quizState = { questions: [], current: 0, correct: 0, answered: false };
+
+function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+
+function startQuiz() {
+  quizState.questions = shuffle(QUESTION_BANK).slice(0, 20);
+  quizState.current = 0;
+  quizState.correct = 0;
+  renderQuiz();
+}
+
+function renderQuiz() {
+  const q = quizState.questions[quizState.current];
+  const total = quizState.questions.length;
+  const idx = quizState.current;
+  quizState.answered = false;
+
+  document.getElementById('quiz-fill').style.width = (idx / total * 100) + '%';
+  document.getElementById('quiz-counter').textContent = `${idx + 1} / ${total}`;
+  document.getElementById('quiz-score').textContent = `✓ ${quizState.correct}`;
+
+  document.getElementById('quiz-card').innerHTML = `
+    <div class="quiz-category">${q.cat}</div>
+    <div class="quiz-q">Q${idx + 1}. ${q.q}</div>
+    <div class="quiz-options" id="opts">
+      ${q.opts.map((o, i) => `<div class="quiz-opt" onclick="answerQuiz(${i})">${'ABCD'[i]}. ${o}</div>`).join('')}
+    </div>
+    <div class="quiz-explain" id="explain"><strong>📖 解析：</strong>${q.explain}</div>
+    <div class="quiz-nav">
+      <button onclick="skipQuiz()" id="skip-btn">跳過</button>
+      <button class="primary" onclick="nextQuiz()" id="next-btn" style="display:none">下一題 →</button>
+    </div>
+  `;
+}
+
+function answerQuiz(i) {
+  if (quizState.answered) return;
+  quizState.answered = true;
+  const q = quizState.questions[quizState.current];
+  const opts = document.querySelectorAll('.quiz-opt');
+  opts.forEach(o => o.classList.add('disabled'));
+  opts[i].classList.add(i === q.ans ? 'correct' : 'wrong');
+  if (i !== q.ans) opts[q.ans].classList.add('correct');
+  if (i === q.ans) quizState.correct++;
+  document.getElementById('quiz-score').textContent = `✓ ${quizState.correct}`;
+  document.getElementById('explain').classList.add('show');
+  document.getElementById('skip-btn').style.display = 'none';
+  document.getElementById('next-btn').style.display = '';
+}
+
+function skipQuiz() { quizState.current++; if (quizState.current < quizState.questions.length) renderQuiz(); else showResult(); }
+function nextQuiz() { quizState.current++; if (quizState.current < quizState.questions.length) renderQuiz(); else showResult(); }
+
+function showResult() {
+  const pct = Math.round(quizState.correct / quizState.questions.length * 100);
+  const emoji = pct >= 80 ? '🎉' : pct >= 60 ? '💪' : '📚';
+  document.getElementById('quiz-fill').style.width = '100%';
+  document.getElementById('quiz-card').innerHTML = `
+    <div style="text-align:center;padding:20px">
+      <div style="font-size:50px;margin-bottom:12px">${emoji}</div>
+      <div style="font-size:28px;font-weight:900;color:${pct>=80?'var(--green)':pct>=60?'var(--yellow)':'var(--red)'}">${pct}%</div>
+      <div style="font-size:16px;margin:8px 0;color:var(--muted)">${quizState.correct} / ${quizState.questions.length} 答對</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:20px">${pct>=80?'很棒！繼續保持！':pct>=60?'還不錯，加強弱點！':'還需努力，再練一次！'}</div>
+      <button onclick="startQuiz()" style="padding:10px 30px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">再測一次</button>
+    </div>
+  `;
+}
+
+// ── Cheatsheet ─────────────────────────────────────────
+const CHEAT_DATA = [
+  { icon: '🤖', title: '核心架構', items: [
+    { key: 'Transformer', val: 'Self-Attention + 位置編碼 + FFN；Encoder-Decoder 架構' },
+    { key: 'GPT 系列', val: 'Decoder-only，自迴歸生成，預測下一個 token', hot: true },
+    { key: 'BERT', val: 'Encoder-only，雙向理解，適合分類/NER', imp: true },
+    { key: 'Token', val: '文字的基本單位；~1英文字=1-2 tokens' },
+    { key: 'Temperature', val: '高→創意多樣；低→確定保守；0≈greedy', hot: true },
+  ]},
+  { icon: '✍️', title: 'Prompt Engineering', items: [
+    { key: 'Zero-shot', val: '不給範例直接問' },
+    { key: 'Few-shot', val: '給2-5個範例讓模型類比學習', hot: true },
+    { key: 'Chain-of-Thought', val: '要求模型「步驟思考」，提升推理準確度', hot: true },
+    { key: 'System Prompt', val: '設定 AI 角色、規則、輸出格式', hot: true },
+    { key: 'Prompt Injection', val: '惡意輸入覆蓋系統指令的攻擊手法', imp: true },
+  ]},
+  { icon: '🔍', title: 'RAG vs Fine-tuning', items: [
+    { key: 'RAG', val: '外部知識庫+即時檢索；知識可更新；不改模型參數', hot: true },
+    { key: 'Fine-tuning', val: '在特定資料集上繼續訓練；改變模型行為/風格', hot: true },
+    { key: 'LoRA', val: '高效微調；低秩矩陣；參數少、成本低', imp: true },
+    { key: 'RLHF', val: '人類偏好反饋強化學習；ChatGPT 訓練方法', hot: true },
+    { key: 'Embedding', val: '文字轉向量；餘弦相似度搜尋相似內容', imp: true },
+  ]},
+  { icon: '⚠️', title: 'AI 倫理與風險', items: [
+    { key: '幻覺 Hallucination', val: '模型自信地生成錯誤資訊', hot: true },
+    { key: 'AI 偏見', val: '訓練資料的偏見被模型學習並放大', hot: true },
+    { key: '可解釋性 XAI', val: '讓 AI 決策透明可理解；醫療金融必要', imp: true },
+    { key: '資料毒化', val: '訓練時植入惡意樣本，影響模型輸出' },
+    { key: 'HHH 原則', val: 'Helpful + Honest + Harmless（Anthropic 原則）', imp: true },
+  ]},
+  { icon: '🏢', title: '企業 AI 應用', items: [
+    { key: '多模態 AI', val: '同時處理文字/圖像/語音；如 GPT-4V', hot: true },
+    { key: '向量資料庫', val: 'Pinecone, Chroma, Weaviate；儲存 Embedding', imp: true },
+    { key: 'AI Agent', val: '自主規劃、呼叫工具、執行多步任務的 AI', imp: true },
+    { key: 'Context Window', val: 'LLM 一次能處理的最大 token 數', imp: true },
+    { key: '評估指標', val: 'BLEU/ROUGE（文字品質）；Perplexity（流暢度）' },
+  ]},
+];
+
+function buildCheatsheet() {
+  const container = document.getElementById('cheatsheet');
+  CHEAT_DATA.forEach((sec, si) => {
+    const div = document.createElement('div');
+    div.className = 'cs-section';
+    div.innerHTML = `
+      <div class="cs-section-header" onclick="toggleCS(${si})">
+        <span class="cs-icon">${sec.icon}</span>
+        <span class="cs-title">${sec.title}</span>
+        <span class="cs-toggle" id="cs-toggle-${si}">▼</span>
+      </div>
+      <div class="cs-body" id="cs-body-${si}">
+        ${sec.items.map(it => `
+          <div class="cs-item">
+            <span class="cs-key">${it.hot ? '<span class="tag hot">高頻</span>' : it.imp ? '<span class="tag imp">重要</span>' : ''}${it.key}</span>
+            <span class="cs-val">${it.val}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    container.appendChild(div);
+  });
+  // Open first section
+  document.getElementById('cs-body-0').classList.add('open');
+}
+
+function toggleCS(i) {
+  const body = document.getElementById('cs-body-' + i);
+  const toggle = document.getElementById('cs-toggle-' + i);
+  const open = body.classList.toggle('open');
+  toggle.textContent = open ? '▲' : '▼';
+}
+
+buildCheatsheet();
+</script>
+</body>
+</html>
